@@ -1,12 +1,23 @@
 import json
 import os
-
+from datetime import datetime
 
 #####
 EventWList = ["Commander", "Market", "MarketBuy", "MarketSell", "ColonisationContribution", "Cargo", "Undocked", "Docked", "FSDJump", "EjectCargo", "Ressurect", "Continued"]
 #####
 
+global cargo, sumtps, totalCargo
 
+
+def tsConvert(ts):
+    dtObj = datetime.fromisoformat(ts.replace('Z', '+00:00'))
+    return dtObj.timestamp()
+
+def tpsCalc(t1, t2 ,cargoCount):
+    sumTime = t2-t1
+    tps = cargoCount/sumTime
+
+    return tps
 
 def picklog():
     path = "~//..//log-depot"
@@ -39,6 +50,36 @@ def aquireLog(path):
                 log.append(line)
     return log
 
+def addCargo(cargoType,count):
+    cargoType = cargoType.lower()
+    if cargoType not in cargo:
+        cargo[cargoType] = count
+        totalCargo[cargoType] = count
+    else:
+        cargo[cargoType] += count
+        totalCargo[cargoType] += count
+    #print(f"Bought {count} {cargoType}")
+    #print(cargo)
+
+def remCargo(cargoType, count):
+    cargoType = cargoType.lower()
+    if cargoType not in cargo:
+        print("Err, subtracting from noneexistent cargo", cargoType)
+    else:
+        if cargo[cargoType] < count:
+            print("Err, subtracting from noneexistent cargo", cargoType, cargo[cargoType], count)
+        else:
+            cargo[cargoType] -= count
+    #print(f"sold {count} {cargoType}")
+    #print(cargo)
+
+haulcount = -1
+tps = []
+t1, t2 = 0,0
+
+cargo = {}
+totalCargo = {}
+
 
 
 log = aquireLog(picklog())
@@ -47,13 +88,60 @@ for line in log:
     if line['event'] == "Commander":
         cmdr = line['Name']
     elif line['event'] == "MarketBuy":
+        cargoType = line['Type']
+        count = line['Count']
+
+        addCargo(cargoType, count)
+
+        haulcount += 1
+        tps.append(0)
+
         print(line)
     elif line['event'] == "Undocked":
-        print(line)
+        #print(line)
+        t1 = tsConvert(line['timestamp'])
+        pass
     elif line['event'] == "Docked":
-        print(line)
+        #print(line)
+        pass
     elif line['event'] == "MarketSell":
-        print(line)
+        cargoType = line['Type']
+        count = line['Count']
+        remCargo(cargoType, count)
+
+        t2 = tsConvert(line['timestamp'])
+        tps[haulcount] += tpsCalc(t1,t2,count)
+        #print(tps)
+
+        #print(line)
+    elif line['event'] == "ColonisationContribution":
+        contributions = line['Contributions']
+        contriCount = 0
+        for contri in contributions:
+            cargoType = contri['Name_Localised']
+            count = contri['Amount']
+            remCargo(cargoType, count)
+            contriCount += count
+
+        t2 = tsConvert(line['timestamp'])
+        tps[haulcount] += tpsCalc(t1,t2,contriCount)
+
+        #print(tps)
+    
+
+avtps = 0
+for i in tps:
+    avtps += i
+avtps /= haulcount
+tonnes = 0
+print("Total tonnage:")
+for item in totalCargo.keys():
+    tonnes += totalCargo[item]
+    print(f"    {totalCargo[item]} {item}")
+print(f"Average Tonnes per Second: {round(avtps,3)}")
+payrate = int(input("Payment per tonne: "))
+print(f"Estimated Payment: {"{:,}".format(payrate * tonnes)}")
+
 
 
 
